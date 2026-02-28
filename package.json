@@ -1,0 +1,42 @@
+{
+  "name": "promptbridge",
+  "version": "1.0.0",
+  "description": "no limit llm api?",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "nodemon src/index.ts",
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pranav-Kunjir/PromptBridge.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Pranav-Kunjir/PromptBridge/issues"
+  },
+  "homepage": "https://github.com/Pranav-Kunjir/PromptBridge#readme",
+  "dependencies": {
+    "express": "^5.2.1",
+    "fs-extra": "^11.3.3",
+    "puppeteer": "^24.37.5",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^25.3.2",
+    "@types/puppeteer": "^5.4.7",
+    "nodemon": "^3.1.14",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
