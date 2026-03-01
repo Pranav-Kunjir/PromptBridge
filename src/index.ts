@@ -59,8 +59,37 @@ class ChatbotAPIService {
   }
 
   private setupMiddleware(): void {
+    const API_KEY = process.env.API_KEY || 'promptbridge_secret_key';
+
+    // Native CORS handling
+    this.app.use((req: Request, res: Response, next: express.NextFunction) => {
+      res.header('Access-Control-Allow-Origin', '*'); // Allow all origins like localhost:5173
+      res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+
+      // Intercept OPTIONS method for preflight
+      if (req.method === 'OPTIONS') {
+        res.sendStatus(200);
+        return;
+      }
+      next();
+    });
+
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
+
+    // Simple API Key Authorization Middleware
+    this.app.use((req: Request, res: Response, next: express.NextFunction) => {
+      // Allow health and status checks without API key if desired, but we'll protect /chat
+      if (req.path === '/chat') {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || authHeader !== `Bearer ${API_KEY}`) {
+          res.status(401).json({ error: 'Unauthorized', details: 'Invalid or missing API key' });
+          return;
+        }
+      }
+      next();
+    });
   }
 
   private setupRoutes(): void {
@@ -95,11 +124,6 @@ class ChatbotAPIService {
 
     if (!prompt || typeof prompt !== 'string') {
       res.status(400).json({ error: 'Missing or invalid prompt' } as ErrorResponse);
-      return;
-    }
-
-    if (prompt.length > 10000) {
-      res.status(400).json({ error: 'Prompt too long (max 10000 characters)' } as ErrorResponse);
       return;
     }
 
@@ -139,7 +163,22 @@ class ChatbotAPIService {
       try {
         const { prompt } = req.body as ChatRequest;
         const answer = await this.askChatbot(prompt);
-        res.json({ answer } as ChatResponse);
+
+        // Attempt to parse it as JSON to ensure it's clean, otherwise wrap it
+        let parsedAnswer;
+        try {
+          parsedAnswer = JSON.parse(answer);
+        } catch (e) {
+          // Fallback if ChatGPT still included some markdown or text
+          const cleanAnswer = answer.replace(/```json/g, '').replace(/```/g, '').trim();
+          try {
+            parsedAnswer = JSON.parse(cleanAnswer);
+          } catch (e2) {
+            parsedAnswer = { response: answer }; // Ultimate fallback
+          }
+        }
+
+        res.json(parsedAnswer);
       } catch (error) {
         console.error('Error processing request:', error);
         res.status(500).json({
@@ -170,31 +209,87 @@ class ChatbotAPIService {
         timeout: CONFIG.timeouts.navigation
       });
 
-      // Wait for and clear input field
-      await this.page.waitForSelector(CONFIG.selectors.input, {
+      // Wait for the prompt textarea (ProseMirror is used by ChatGPT)
+      const inputSelector = '#prompt-textarea';
+      await this.page.waitForSelector(inputSelector, {
         timeout: CONFIG.timeouts.selector
       });
-      await this.page.click(CONFIG.selectors.input, { clickCount: 3 });
-      await this.page.keyboard.press('Backspace');
 
-      // Type prompt
-      await this.page.type(CONFIG.selectors.input, prompt, { delay: 50 });
+      // Clear and focus the input field using JS to bypass "Node not clickable" errors
+      await this.page.evaluate((sel) => {
+        const el = document.querySelector(sel) as HTMLElement;
+        if (el) {
+          if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+            (el as HTMLInputElement).value = '';
+          } else {
+            el.innerHTML = '<p><br></p>'; // ProseMirror clear
+          }
+          el.focus();
+        }
+      }, inputSelector);
 
-      // Click submit button
-      await this.page.click(CONFIG.selectors.submitButton);
+      await new Promise(r => setTimeout(r, 200));
 
-      // Wait for response with timeout
-      await this.page.waitForSelector(CONFIG.selectors.response, {
-        timeout: CONFIG.timeouts.response
+      // Insert prompt text instantaneously, preserving newlines without triggering Enter
+      await this.page.evaluate((text) => {
+        const el = document.activeElement as HTMLElement;
+        if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT')) {
+          (el as HTMLInputElement).value = text;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+        } else {
+          // execCommand('insertText') works perfectly in ProseMirror to paste text and trigger input events
+          document.execCommand('insertText', false, text);
+        }
+      }, prompt);
+
+      // Click submit button or press Enter
+      await new Promise(r => setTimeout(r, 500)); // small delay to let UI register text
+
+      const sendBtnAvailable = await this.page.evaluate(() => {
+        const btn = document.querySelector('button[data-testid="send-button"]') as HTMLButtonElement;
+        if (btn && !btn.disabled) {
+          btn.click();
+          return true;
+        }
+        return false;
       });
 
-      // Extract response text
-      const response = await this.page.$eval(
-        CONFIG.selectors.response,
-        (el: Element) => el.textContent || ''
-      );
+      if (!sendBtnAvailable) {
+        await this.page.keyboard.press('Enter');
+      }
 
-      return response.trim();
+      // Wait for response to start generating (indicated by the stop button appearing)
+      try {
+        await this.page.waitForSelector('button[aria-label="Stop generating"]', { timeout: 5000 });
+        // Now wait for it to disappear, which means generation is complete
+        await this.page.waitForFunction(() => {
+          return !document.querySelector('button[aria-label="Stop generating"]');
+        }, { timeout: CONFIG.timeouts.response });
+      } catch (e) {
+        // Stop button not detected, fallback to arbitrary wait
+        await new Promise(r => setTimeout(r, 4000));
+      }
+
+      // Extract response text
+      const response = await this.page.evaluate(() => {
+        const responses = document.querySelectorAll('div[data-message-author-role="assistant"]');
+        if (responses.length === 0) return '';
+
+        const lastResponse = responses[responses.length - 1];
+        const contentDiv = lastResponse.querySelector('.markdown');
+        return contentDiv ? contentDiv.textContent || '' : lastResponse.textContent || '';
+      });
+
+      const finalResponse = response.trim();
+
+      // If it returned empty, dump a screenshot so we can see what the browser saw
+      if (!finalResponse) {
+        console.error('Bot returned an empty response. Dumping screenshot...');
+        await this.page.screenshot({ path: 'debug_empty_response.png' });
+        await fs.writeFile('debug_empty_response.html', await this.page.content());
+      }
+
+      return finalResponse;
     } catch (error) {
       throw new Error(`Failed to get response: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -293,7 +388,8 @@ class ChatbotAPIService {
         }
       });
 
-      this.page = await this.browser.newPage();
+      const pages = await this.browser.pages();
+      this.page = pages.length > 0 ? pages[0] : await this.browser.newPage();
 
       // Set a realistic user agent
       await this.page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
