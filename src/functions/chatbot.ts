@@ -90,8 +90,8 @@ export const askChatbot = async (prompt: string): Promise<string> => {
         // If it returned empty, dump a screenshot so we can see what the browser saw
         if (!finalResponse) {
             console.error('Bot returned an empty response. Dumping screenshot...');
-            await state.page.screenshot({ path: 'debug_empty_response.png' });
-            await fs.writeFile('debug_empty_response.html', await state.page.content());
+            await state.page.screenshot({ path: 'debug/debug_empty_response.png' });
+            await fs.writeFile('debug/debug_empty_response.html', await state.page.content());
         }
 
         return finalResponse;
