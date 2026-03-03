@@ -29,10 +29,14 @@ export const setupRoutes = (): void => {
         }
 
         // Add to queue
+        const queuePosition = state.requestQueue.length + 1;
         state.requestQueue.push({ req, res });
+        console.log(`[API] Request received. Queue position: ${queuePosition}`);
 
         if (!state.isProcessing) {
             processQueue();
+        } else {
+            console.log(`[API] Processing another request. Request queued at position ${queuePosition}.`);
         }
     });
 

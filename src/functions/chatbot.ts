@@ -75,14 +75,74 @@ export const askChatbot = async (prompt: string): Promise<string> => {
             await new Promise(r => setTimeout(r, 4000));
         }
 
-        // Extract response text
+        // Extract response text properly preserving markdown code blocks and newlines
         const response = await state.page.evaluate(() => {
             const responses = document.querySelectorAll('div[data-message-author-role="assistant"]');
             if (responses.length === 0) return '';
 
             const lastResponse = responses[responses.length - 1];
             const contentDiv = lastResponse.querySelector('.markdown');
-            return contentDiv ? contentDiv.textContent || '' : lastResponse.textContent || '';
+
+            if (!contentDiv) {
+                return (lastResponse as HTMLElement).innerText || lastResponse.textContent || '';
+            }
+
+            // Clone to avoid mutating the live DOM
+            const clone = contentDiv.cloneNode(true) as HTMLElement;
+
+            // Remove purely interactive or UI garbage elements from the ChatGPT interface clone explicitly
+            clone.querySelectorAll('button').forEach(btn => btn.remove());
+            clone.querySelectorAll('svg').forEach(svg => svg.remove());
+
+            // Process all <pre> elements (Code blocks)
+            const pres = clone.querySelectorAll('pre');
+            pres.forEach(pre => {
+                const codeEl = pre.querySelector('code');
+                let codeText = '';
+
+                if (codeEl) {
+                    // For code wrappers, innerText is actually best to maintain spaces if it hasn't been squished
+                    // but some elements use innerHTML. Let's rely on standard text content as they render code nodes 
+                    // cleanly inside the spans.
+                    codeText = codeEl.innerText || codeEl.textContent || '';
+                } else {
+                    codeText = pre.innerText || pre.textContent || '';
+                }
+
+                let lang = '';
+                if (codeEl && codeEl.className) {
+                    const match = codeEl.className.match(/language-(\w+)/);
+                    if (match) lang = match[1];
+                }
+
+                // Make sure code blocks don't get destroyed by paragraph logic below.
+                // Reconstruct exact Markdown ticks with preserved physical newline escapes.
+                const markdownBlock = document.createElement('div');
+                markdownBlock.className = 'processed-code-block';
+                markdownBlock.innerText = `\n\`\`\`${lang}\n${codeText}\n\`\`\`\n`;
+
+                pre.parentNode?.replaceChild(markdownBlock, pre);
+            });
+
+            // Make it visible to calculate structural breaks via innerText
+            clone.style.position = 'absolute';
+            clone.style.left = '-9999px';
+            clone.style.width = '800px';
+            document.body.appendChild(clone);
+
+            // Force spacing on standard text blocks
+            clone.querySelectorAll('p, .processed-code-block').forEach(el => {
+                (el as HTMLElement).style.display = 'block';
+                (el as HTMLElement).style.marginBottom = '1.5em';
+                (el as HTMLElement).style.marginTop = '1.5em';
+            });
+
+            // Using pure innerText here reads the visual layout we just forced via CSS,
+            // returning all preserved indents inside paragraphs and generated blocks!
+            const result = clone.innerText;
+            document.body.removeChild(clone);
+
+            return result;
         });
 
         const finalResponse = response.trim();
@@ -90,6 +150,7 @@ export const askChatbot = async (prompt: string): Promise<string> => {
         // If it returned empty, dump a screenshot so we can see what the browser saw
         if (!finalResponse) {
             console.error('Bot returned an empty response. Dumping screenshot...');
+            await fs.ensureDir('debug');
             await state.page.screenshot({ path: 'debug/debug_empty_response.png' });
             await fs.writeFile('debug/debug_empty_response.html', await state.page.content());
         }

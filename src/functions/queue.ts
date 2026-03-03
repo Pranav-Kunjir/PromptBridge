@@ -1,6 +1,7 @@
 import { state } from './state';
 import { askChatbot } from './chatbot';
 import { ChatRequest, ErrorResponse } from './types';
+import { formatResponseCode } from './utils';
 
 export const processQueue = async (): Promise<void> => {
     if (state.isProcessing || state.requestQueue.length === 0) {
@@ -10,6 +11,7 @@ export const processQueue = async (): Promise<void> => {
     state.isProcessing = true;
 
     while (state.requestQueue.length > 0) {
+        console.log(state.requestQueue)
         const { req, res } = state.requestQueue[0];
 
         try {
@@ -26,9 +28,13 @@ export const processQueue = async (): Promise<void> => {
                 try {
                     parsedAnswer = JSON.parse(cleanAnswer);
                 } catch (e2) {
-                    parsedAnswer = answer; // Ultimate fallback
+                    // Ultimate fallback, format it so it survives JSON parsing with literal newlines
+                    parsedAnswer = { answer: formatResponseCode(answer) };
                 }
             }
+
+            // Optional Formatting Layer: ensure that literal `\n` characters are passed exactly as the API requested
+            // In a JSON payload, a newline is usually naturally escaped by Express `res.json()`.
 
             res.json(parsedAnswer);
         } catch (error) {
