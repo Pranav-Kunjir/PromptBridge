@@ -11,7 +11,7 @@ export const processQueue = async (): Promise<void> => {
     state.isProcessing = true;
 
     while (state.requestQueue.length > 0) {
-        console.log(state.requestQueue)
+        // console.log(state.requestQueue)
         const { req, res } = state.requestQueue[0];
 
         try {
@@ -24,7 +24,9 @@ export const processQueue = async (): Promise<void> => {
                 parsedAnswer = JSON.parse(answer);
             } catch (e) {
                 // Fallback if ChatGPT still included some markdown or text
+                console.log(answer)
                 const cleanAnswer = answer.replace(/```json/g, '').replace(/```/g, '').trim();
+                console.log(cleanAnswer)
                 try {
                     parsedAnswer = JSON.parse(cleanAnswer);
                 } catch (e2) {

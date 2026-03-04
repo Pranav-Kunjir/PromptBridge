@@ -4,7 +4,9 @@ export const formatResponseCode = (text: string): string => {
     // If we receive "Line 1\nLine 2", we convert it to "Line 1\\nLine 2".
 
     // Convert physical newlines to the string characters "\" and "n"
-    let formatted = text.replace(/\n/g, '\\n');
+    let formatted = text
+        .replace(/\\n/g, "\n")
+        .replace(/^Python\s*/, ""); // remove leading "Python" label if present
 
     // Convert carriage returns too in case Windows encoding crept in
     formatted = formatted.replace(/\r/g, '\\r');
