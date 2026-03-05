@@ -3,6 +3,7 @@ import { state } from './state';
 import { saveSession } from './session';
 import { processQueue } from './queue';
 import { ChatRequest, ErrorResponse } from './types';
+import { db } from './db';
 
 export const setupRoutes = (): void => {
     // Health check endpoint
@@ -28,9 +29,23 @@ export const setupRoutes = (): void => {
             return;
         }
 
+        // Log request to DB
+        let dbRequestId = '';
+        try {
+            const apiReq = await db.apiRequest.create({
+                data: {
+                    prompt,
+                    status: 'Queued'
+                }
+            });
+            dbRequestId = apiReq.id;
+        } catch (err) {
+            console.error('Failed to log request to DB:', err);
+        }
+
         // Add to queue
         const queuePosition = state.requestQueue.length + 1;
-        state.requestQueue.push({ req, res });
+        state.requestQueue.push({ req, res, dbRequestId });
         console.log(`[API] Request received. Queue position: ${queuePosition}`);
 
         if (!state.isProcessing) {
@@ -52,12 +67,43 @@ export const setupRoutes = (): void => {
     });
 
     // Admin: get status
-    state.app.get('/admin/status', (req: Request, res: Response) => {
-        res.json({
-            initialized: state.isInitialized,
-            queueLength: state.requestQueue.length,
-            browserActive: !!state.browser,
-            pageActive: !!state.page
-        });
+    state.app.get('/admin/status', async (req: Request, res: Response) => {
+        try {
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+            const totalRequests24h = await db.apiRequest.count({
+                where: { createdAt: { gte: twentyFourHoursAgo } }
+            });
+
+            res.json({
+                initialized: state.isInitialized,
+                queueLength: state.requestQueue.length,
+                browserActive: !!state.browser,
+                pageActive: !!state.page,
+                totalRequests24h
+            });
+        } catch (error) {
+            // Fallback if DB fails
+            res.json({
+                initialized: state.isInitialized,
+                queueLength: state.requestQueue.length,
+                browserActive: !!state.browser,
+                pageActive: !!state.page,
+                totalRequests24h: 0
+            });
+        }
+    });
+
+    // Admin: get recent analytics
+    state.app.get('/admin/analytics', async (req: Request, res: Response) => {
+        try {
+            const logs = await db.apiRequest.findMany({
+                orderBy: { createdAt: 'desc' },
+                take: 10
+            });
+            res.json({ logs });
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch analytics' });
+        }
     });
 };

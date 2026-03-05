@@ -1,0 +1,43 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ApiRequest {
+  id          String   @id @default(uuid())
+  prompt      String
+  status      String   @default("Queued") // Queued, Processing, Completed, Failed
+  result      String?
+  error       String?
+  durationMs  Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Optional relations
+  apiKeyId    String?
+  apiKey      ApiKey?  @relation(fields: [apiKeyId], references: [id])
+}
+
+model ApiKey {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  owner       String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  
+  requests    ApiRequest[]
+}
+
+model SystemLog {
+  id          String   @id @default(uuid())
+  event       String
+  details     String?
+  createdAt   DateTime @default(now())
+}

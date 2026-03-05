@@ -24,6 +24,7 @@
   },
   "homepage": "https://github.com/Pranav-Kunjir/PromptBridge#readme",
   "dependencies": {
+    "@prisma/client": "^6.19.2",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "fs-extra": "^11.3.3",
@@ -38,6 +39,7 @@
     "@types/node": "^25.3.2",
     "@types/puppeteer": "^5.4.7",
     "nodemon": "^3.1.14",
+    "prisma": "^6.19.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }

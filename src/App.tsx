@@ -25,16 +25,28 @@ const Dashboard = () => {
     queueLength: 0,
     browserActive: false,
     pageActive: false,
+    totalRequests24h: 0,
     error: null as string | null
   });
+  const [logs, setLogs] = useState<any[]>([]);
 
   const fetchStats = async () => {
     setIsRefreshing(true);
     try {
-      const res = await fetch('/admin/status');
-      if (!res.ok) throw new Error('Failed to fetch status');
-      const data = await res.json();
-      setStats({ ...data, error: null });
+      const [statusRes, logsRes] = await Promise.all([
+        fetch('/admin/status'),
+        fetch('/admin/analytics')
+      ]);
+
+      if (!statusRes.ok) throw new Error('Failed to fetch status');
+
+      const statusData = await statusRes.json();
+      setStats({ ...statusData, error: null });
+
+      if (logsRes.ok) {
+        const logsData = await logsRes.json();
+        setLogs(logsData.logs || []);
+      }
     } catch (err: any) {
       setStats(prev => ({ ...prev, error: err.message }));
     } finally {
@@ -97,11 +109,16 @@ const Dashboard = () => {
             <div className="stat-icon">
               <Server className="w-6 h-6" />
             </div>
+            {stats.pageActive ? (
+              <span className="badge badge-success" style={{ background: 'rgba(16, 185, 129, 0.1)', color: 'var(--success)', borderColor: 'rgba(16, 185, 129, 0.2)' }}>Listening</span>
+            ) : (
+              <span className="badge" style={{ background: 'rgba(255, 255, 255, 0.1)', color: 'var(--text-secondary)', borderColor: 'var(--border-color)' }}>Idle</span>
+            )}
           </div>
-          <span className="stat-label">Page Status</span>
-          <span className="stat-value">{stats.pageActive ? 'Ready' : 'Not Ready'}</span>
-          <p className="text-success text-sm flex items-center gap-2 mt-4">
-            Listening for prompts
+          <span className="stat-label">Total Requests (24h)</span>
+          <span className="stat-value">{stats.totalRequests24h || 0}</span>
+          <p className="text-secondary text-sm flex items-center gap-2 mt-4">
+            Processed in last 24 hours
           </p>
         </div>
 
@@ -118,6 +135,45 @@ const Dashboard = () => {
           <p className="text-secondary text-sm mt-4">
             Active pending jobs
           </p>
+        </div>
+      </div>
+      <div className="mt-8 mb-4">
+        <h2 className="text-2xl font-bold header-title mb-4">Recent Activity</h2>
+        <div className="glass-panel flex-col gap-4">
+          {logs.length === 0 ? (
+            <p className="text-secondary text-sm text-center py-4">No recent activity detected.</p>
+          ) : (
+            logs.map((log: any, index: number) => {
+              // Parse time 
+              const logDate = new Date(log.createdAt);
+              const now = new Date();
+              const diffMs = now.getTime() - logDate.getTime();
+              const diffMins = Math.floor(diffMs / 60000);
+              const timeStr = diffMins < 1 ? 'Just now' : diffMins === 1 ? '1 min ago' : diffMins < 60 ? `${diffMins} mins ago` : logDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+              return (
+                <div key={log.id} className="flex justify-between items-center" style={{ padding: '1rem', borderBottom: index < logs.length - 1 ? '1px solid var(--glass-border)' : 'none' }}>
+                  <div className="flex items-center gap-4">
+                    <div className="stat-icon" style={{
+                      width: '36px', height: '36px', marginBottom: 0,
+                      color: log.status === 'Completed' ? 'var(--success)' : log.status === 'Failed' ? 'var(--error)' : 'var(--accent-primary)',
+                      background: log.status === 'Completed' ? 'rgba(16, 185, 129, 0.1)' : log.status === 'Failed' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)'
+                    }}>
+                      {log.status === 'Completed' ? <CheckCircle className="w-4 h-4" /> : log.status === 'Failed' ? <XCircle className="w-4 h-4" /> : <Activity className="w-4 h-4" />}
+                    </div>
+                    <div>
+                      <p className="font-bold flex items-center gap-2">
+                        Request {log.status}
+                        {log.durationMs && <span className="text-xs text-secondary font-normal ml-2">({(log.durationMs / 1000).toFixed(1)}s)</span>}
+                      </p>
+                      <p className="text-sm text-secondary truncate max-w-md">"{log.prompt}"</p>
+                    </div>
+                  </div>
+                  <span className="text-sm text-secondary whitespace-nowrap">{timeStr}</span>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>
