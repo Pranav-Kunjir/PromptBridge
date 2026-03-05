@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { state } from './state';
 import { saveSession } from './session';
+import { startBrowser, stopBrowser } from './browser';
 import { processQueue } from './queue';
 import { ChatRequest, ErrorResponse } from './types';
 import { db } from './db';
@@ -66,6 +67,34 @@ export const setupRoutes = (): void => {
         }
     });
 
+    // Admin: start browser logic
+    state.app.post('/admin/start', async (req: Request, res: Response): Promise<void> => {
+        try {
+            await startBrowser();
+            res.json({ message: 'API Logic started successfully' });
+        } catch (error) {
+            console.error('Failed to start browser:', error);
+            res.status(500).json({ error: 'Failed to start API Logic' } as ErrorResponse);
+        }
+    });
+
+    // Admin: stop browser logic
+    state.app.post('/admin/stop', async (req: Request, res: Response): Promise<void> => {
+        try {
+            await stopBrowser();
+            res.json({ message: 'API Logic stopped successfully' });
+
+            // Kill the backend process completely as requested by user
+            setTimeout(() => {
+                console.log('Terminating backend process...');
+                process.exit(0);
+            }, 500);
+        } catch (error) {
+            console.error('Failed to stop browser:', error);
+            res.status(500).json({ error: 'Failed to stop API Logic' } as ErrorResponse);
+        }
+    });
+
     // Admin: get status
     state.app.get('/admin/status', async (req: Request, res: Response) => {
         try {
@@ -76,6 +105,7 @@ export const setupRoutes = (): void => {
             });
 
             res.json({
+                isActive: state.isActive,
                 initialized: state.isInitialized,
                 queueLength: state.requestQueue.length,
                 browserActive: !!state.browser,
@@ -85,6 +115,7 @@ export const setupRoutes = (): void => {
         } catch (error) {
             // Fallback if DB fails
             res.json({
+                isActive: state.isActive,
                 initialized: state.isInitialized,
                 queueLength: state.requestQueue.length,
                 browserActive: !!state.browser,

@@ -6,6 +6,7 @@ export const state: AppState = {
     browser: null,
     page: null,
     isInitialized: false,
+    isActive: true,
     requestQueue: [],
     isProcessing: false,
 };

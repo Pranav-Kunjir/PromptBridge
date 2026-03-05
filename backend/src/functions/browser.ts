@@ -7,6 +7,8 @@ import { loadSession, saveSession } from './session';
 puppeteer.use(StealthPlugin());
 
 export const initializeBrowser = async (): Promise<void> => {
+    if (!state.isActive) return;
+
     try {
         console.log('Initializing browser...');
 
@@ -41,7 +43,9 @@ export const initializeBrowser = async (): Promise<void> => {
         state.browser.on('disconnected', () => {
             console.error('Browser disconnected!');
             state.isInitialized = false;
-            reinitializeBrowser();
+            if (state.isActive) {
+                reinitializeBrowser();
+            }
         });
 
     } catch (error) {
@@ -51,6 +55,7 @@ export const initializeBrowser = async (): Promise<void> => {
 };
 
 export const reinitializeBrowser = async (): Promise<void> => {
+    if (!state.isActive) return;
     console.log('Attempting to reinitialize browser...');
     setTimeout(async () => {
         try {
@@ -59,6 +64,33 @@ export const reinitializeBrowser = async (): Promise<void> => {
             console.error('Failed to reinitialize browser:', error);
         }
     }, 5000);
+};
+
+export const startBrowser = async (): Promise<void> => {
+    if (state.isActive && state.isInitialized) return;
+
+    console.log('Starting API logic & Browser...');
+    state.isActive = true;
+    await initializeBrowser();
+};
+
+export const stopBrowser = async (): Promise<void> => {
+    console.log('Stopping API logic & Browser...');
+    state.isActive = false;
+
+    // Save session before closing
+    try {
+        await saveSession();
+    } catch (error) {
+        console.error('Failed to save session on stop:', error);
+    }
+
+    if (state.browser) {
+        await state.browser.close();
+        state.browser = null;
+        state.page = null;
+        state.isInitialized = false;
+    }
 };
 
 export const shutdownBrowser = async (): Promise<void> => {

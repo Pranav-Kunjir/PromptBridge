@@ -24,6 +24,7 @@ export interface AppState {
     browser: Browser | null;
     page: Page | null;
     isInitialized: boolean;
+    isActive: boolean;
     requestQueue: Array<{ req: Request; res: Response; dbRequestId: string }>;
     isProcessing: boolean;
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import {
   Activity,
@@ -19,8 +19,10 @@ import './index.css';
 
 // System Status Dashboard Component
 const Dashboard = () => {
+  const isTogglingRef = useRef(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [stats, setStats] = useState({
+    isActive: false, // Default to false until fetched
     initialized: false,
     queueLength: 0,
     browserActive: false,
@@ -31,6 +33,7 @@ const Dashboard = () => {
   const [logs, setLogs] = useState<any[]>([]);
 
   const fetchStats = async () => {
+    if (isTogglingRef.current) return;
     setIsRefreshing(true);
     try {
       const [statusRes, logsRes] = await Promise.all([
@@ -48,7 +51,7 @@ const Dashboard = () => {
         setLogs(logsData.logs || []);
       }
     } catch (err: any) {
-      setStats(prev => ({ ...prev, error: err.message }));
+      setStats(prev => ({ ...prev, isActive: false, error: err.message }));
     } finally {
       setIsRefreshing(false);
     }
@@ -60,6 +63,56 @@ const Dashboard = () => {
     return () => clearInterval(interval);
   }, []);
 
+  const toggleApi = async () => {
+    if (isTogglingRef.current) return;
+    isTogglingRef.current = true;
+    setIsRefreshing(true);
+    try {
+      if (stats.isActive) {
+        // Active -> Stop -> Kills node process
+        await fetch('/admin/stop', { method: 'POST' });
+        setStats(prev => ({ ...prev, isActive: false, initialized: false, browserActive: false, pageActive: false, error: null }));
+        setIsRefreshing(false);
+        isTogglingRef.current = false;
+      } else {
+        // Dead -> Start -> Spawns node process
+        await fetch('/__start-backend', { method: 'POST' });
+
+        // Poll until the server is responsive (10 second timeout)
+        let attempts = 0;
+        const maxAttempts = 10;
+        const pollInterval = setInterval(async () => {
+          attempts++;
+          try {
+            const res = await fetch('/admin/status');
+            if (res.ok) {
+              clearInterval(pollInterval);
+              await fetchStats(); // Stops refreshing and updates state correctly
+              isTogglingRef.current = false;
+            } else if (attempts >= maxAttempts) {
+              clearInterval(pollInterval);
+              setIsRefreshing(false);
+              setStats(prev => ({ ...prev, error: 'Backend failed to start in 10 seconds' }));
+              isTogglingRef.current = false;
+            }
+          } catch (e) {
+            // Still booting
+            if (attempts >= maxAttempts) {
+              clearInterval(pollInterval);
+              setIsRefreshing(false);
+              setStats(prev => ({ ...prev, error: 'Backend failed to start in 10 seconds' }));
+              isTogglingRef.current = false;
+            }
+          }
+        }, 1000); // Check every second for 10 seconds
+      }
+    } catch (err: any) {
+      setStats(prev => ({ ...prev, error: err.message }));
+      setIsRefreshing(false);
+      isTogglingRef.current = false;
+    }
+  };
+
   const isHealthy = stats.initialized && stats.browserActive && !stats.error;
 
   return (
@@ -69,10 +122,26 @@ const Dashboard = () => {
           <h1 className="text-3xl font-bold header-title">System Overview</h1>
           <p className="text-secondary mt-4">Real-time metrics and administration controls</p>
         </div>
-        <button className="btn btn-outline" onClick={fetchStats} disabled={isRefreshing}>
-          <RefreshCcw className={`w - 4 h - 4 ${isRefreshing ? 'animate-spin' : ''} `} />
-          Refresh Data
-        </button>
+        <div className="flex gap-4 items-center">
+          <label className="switch-label cursor-pointer mr-2">
+            <span className={isRefreshing ? 'text-secondary animate-pulse' : stats.isActive ? 'text-success' : 'text-secondary'}>
+              {isRefreshing ? (stats.isActive ? 'Stopping API...' : 'Starting API...') : (stats.isActive ? 'API Active' : 'API Stopped')}
+            </span>
+            <div className={`switch ${isRefreshing ? 'loading cursor-not-allowed' : ''}`}>
+              <input
+                type="checkbox"
+                checked={isRefreshing ? !stats.isActive : stats.isActive}
+                onChange={toggleApi}
+                disabled={isRefreshing}
+              />
+              <span className="slider"></span>
+            </div>
+          </label>
+          <button className="btn btn-outline" onClick={fetchStats} disabled={isRefreshing}>
+            <RefreshCcw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Refresh Data
+          </button>
+        </div>
       </div>
 
       {stats.error && (
