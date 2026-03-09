@@ -5,6 +5,7 @@ import { startBrowser, stopBrowser } from './browser';
 import { processQueue } from './queue';
 import { ChatRequest, ErrorResponse } from './types';
 import { db } from './db';
+import crypto from 'crypto';
 
 export const setupRoutes = (): void => {
     // Health check endpoint
@@ -36,7 +37,8 @@ export const setupRoutes = (): void => {
             const apiReq = await db.apiRequest.create({
                 data: {
                     prompt,
-                    status: 'Queued'
+                    status: 'Queued',
+                    apiKeyId: (req as any).apiKeyId || null
                 }
             });
             dbRequestId = apiReq.id;
@@ -135,6 +137,48 @@ export const setupRoutes = (): void => {
             res.json({ logs });
         } catch (error) {
             res.status(500).json({ error: 'Failed to fetch analytics' });
+        }
+    });
+
+    // Admin: list api keys
+    state.app.get('/admin/api-keys', async (req: Request, res: Response) => {
+        try {
+            const keys = await db.apiKey.findMany({
+                orderBy: { createdAt: 'desc' }
+            });
+            res.json(keys);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to fetch API keys' });
+        }
+    });
+
+    // Admin: generate api key
+    state.app.post('/admin/api-keys', async (req: Request, res: Response) => {
+        try {
+            const { owner } = req.body;
+            const newKey = `pb_${crypto.randomBytes(16).toString('hex')}`;
+            const apiKey = await db.apiKey.create({
+                data: {
+                    key: newKey,
+                    owner: owner || 'Admin'
+                }
+            });
+            res.json(apiKey);
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to generate API key' });
+        }
+    });
+
+    // Admin: delete api key
+    state.app.delete('/admin/api-keys/:id', async (req: Request, res: Response) => {
+        try {
+            const { id } = req.params;
+            await db.apiKey.delete({
+                where: { id: id as string }
+            });
+            res.json({ message: 'API key deleted successfully' });
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to delete API key' });
         }
     });
 };

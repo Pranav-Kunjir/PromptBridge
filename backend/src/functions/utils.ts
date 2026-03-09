@@ -6,7 +6,8 @@ export const formatResponseCode = (text: string): string => {
     // Convert physical newlines to the string characters "\" and "n"
     let formatted = text
         .replace(/\\n/g, "\n")
-        .replace(/^Python\s*/, ""); // remove leading "Python" label if present
+        .replace(/^Python\s*/, "")
+        .replace(/^RUN\s*/, ""); // remove leading "Python" label if present
 
     // Convert carriage returns too in case Windows encoding crept in
     formatted = formatted.replace(/\r/g, '\\r');
