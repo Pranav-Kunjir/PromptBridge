@@ -296,9 +296,66 @@ const UsersPage = () => (
 const SettingsPage = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ title: string, type: 'success' | 'error' } | null>(null);
-  const [copiedKey, setCopiedKey] = useState(false);
+  const [apiKeys, setApiKeys] = useState<any[]>([]);
+  const [isLoadingKeys, setIsLoadingKeys] = useState(false);
+  const [isGeneratingKey, setIsGeneratingKey] = useState(false);
 
-  const apiKey = "pb_test_8f92jkl31m0n4b5v6c7x8z9"; // Placeholder standard API key example
+  const fetchApiKeys = async () => {
+    setIsLoadingKeys(true);
+    try {
+      const res = await fetch('/admin/api-keys');
+      if (res.ok) {
+        const data = await res.json();
+        setApiKeys(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch API keys', err);
+    } finally {
+      setIsLoadingKeys(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchApiKeys();
+  }, []);
+
+  const handleGenerateKey = async () => {
+    setIsGeneratingKey(true);
+    try {
+      const res = await fetch('/admin/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner: 'Admin' })
+      });
+      if (res.ok) {
+        const newKey = await res.json();
+        setApiKeys([newKey, ...apiKeys]);
+        showToast('API Key generated successfully', 'success');
+      } else {
+        throw new Error('Failed to generate key');
+      }
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setIsGeneratingKey(false);
+    }
+  };
+
+  const handleRevokeKey = async (id: string) => {
+    try {
+      const res = await fetch(`/admin/api-keys/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setApiKeys(apiKeys.filter(k => k.id !== id));
+        showToast('API Key revoked', 'success');
+      } else {
+        throw new Error('Failed to revoke key');
+      }
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const apiKey = apiKeys.length > 0 ? apiKeys[0].key : "pb_test_8f92jkl31m0n4b5v6c7x8z9"; // First active key or placeholder
 
   const showToast = (title: string, type: 'success' | 'error') => {
     setToastMessage({ title, type });
@@ -321,14 +378,9 @@ const SettingsPage = () => {
     }
   };
 
-  const copyToClipboard = (text: string, isKey = false) => {
+  const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    if (isKey) {
-      setCopiedKey(true);
-      setTimeout(() => setCopiedKey(false), 2000);
-    } else {
-      showToast('Copied to clipboard', 'success');
-    }
+    showToast('Copied to clipboard', 'success');
   };
 
   return (
@@ -377,26 +429,73 @@ const SettingsPage = () => {
         </div>
 
         {/* API Key Management */}
-        <div className="glass-panel delay-200">
-          <div className="flex items-center gap-2 mb-4">
-            <SettingsIcon className="w-5 h-5 text-accent-primary" />
-            <h2 className="text-xl font-bold">API Key</h2>
+        <div className="glass-panel delay-200" style={{ gridColumn: '1 / -1' }}>
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex items-center gap-2">
+              <SettingsIcon className="w-5 h-5 text-accent-primary" />
+              <h2 className="text-xl font-bold">API Keys</h2>
+            </div>
+            <button
+              className="btn btn-primary"
+              style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+              onClick={handleGenerateKey}
+              disabled={isGeneratingKey}
+            >
+              {isGeneratingKey ? 'Generating...' : '+ Generate New Key'}
+            </button>
           </div>
           <p className="text-secondary text-sm mb-4">
-            Your current active API key for programmatic requests. Keep this secret.
+            Manage your API keys used for programmatic access to PromptBridge. Keep these secret.
           </p>
-          <div className="flex items-center gap-2 p-3 bg-bg-primary rounded-lg border border-border-color">
-            <code className="text-sm flex-1 text-text-primary" style={{ userSelect: 'all' }}>
-              {apiKey}
-            </code>
-            <button
-              className="btn btn-outline"
-              style={{ padding: '0.25rem 0.5rem' }}
-              onClick={() => copyToClipboard(apiKey, true)}
-              title="Copy API Key"
-            >
-              {copiedKey ? <CheckCircle className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-            </button>
+
+          <div className="bg-bg-primary rounded-lg border border-border-color overflow-hidden">
+            {isLoadingKeys ? (
+              <div className="p-4 text-center text-secondary text-sm">Loading keys...</div>
+            ) : apiKeys.length === 0 ? (
+              <div className="p-4 text-center text-secondary text-sm">No API keys generated yet.</div>
+            ) : (
+              <table className="w-full text-left text-sm" style={{ borderCollapse: 'collapse' }}>
+                <thead className="bg-bg-secondary text-secondary">
+                  <tr>
+                    <th className="p-3 font-medium border-b border-border-color">Key</th>
+                    <th className="p-3 font-medium border-b border-border-color">Created</th>
+                    <th className="p-3 font-medium border-b border-border-color text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {apiKeys.map((keyObj, index) => (
+                    <tr key={keyObj.id} style={{ borderBottom: index < apiKeys.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
+                      <td className="p-3 text-text-primary font-mono select-all">
+                        {keyObj.key}
+                      </td>
+                      <td className="p-3 text-secondary">
+                        {new Date(keyObj.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="p-3 text-right">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            className="btn btn-outline"
+                            style={{ padding: '0.25rem 0.5rem', background: 'transparent' }}
+                            onClick={() => copyToClipboard(keyObj.key)}
+                            title="Copy API Key"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+                          <button
+                            className="btn btn-outline text-error hover:bg-error/10 hover:border-error"
+                            style={{ padding: '0.25rem 0.5rem', background: 'transparent', borderColor: 'rgba(239, 68, 68, 0.3)', color: 'var(--error)' }}
+                            onClick={() => handleRevokeKey(keyObj.id)}
+                            title="Revoke API Key"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       </div>
@@ -417,13 +516,14 @@ const SettingsPage = () => {
           </div>
           <div className="p-4 relative hover-group">
             <pre className="text-sm text-text-secondary overflow-x-auto whitespace-pre-wrap">
-              {`curl - X POST http://localhost:3000/chat \\
+              {`curl -X POST http://localhost:3000/chat \\
+-H "Authorization: Bearer ${apiKey}" \\
 -H "Content-Type: application/json" \\
 -d '{"prompt": "Hello! What is your purpose?"}'`}
             </pre>
             <button
               className="absolute top-4 right-4 text-text-secondary hover:text-text-primary transition-colors"
-              onClick={() => copyToClipboard(`curl - X POST http://localhost:3000/chat -H "Content-Type: application/json" -d '{"prompt": "Hello! What is your purpose?"}'`)}
+              onClick={() => copyToClipboard(`curl -X POST http://localhost:3000/chat -H "Authorization: Bearer ${apiKey}" -H "Content-Type: application/json" -d '{"prompt": "Hello! What is your purpose?"}'`)}
             >
               <Copy className="w-4 h-4" />
             </button >
@@ -440,6 +540,7 @@ const SettingsPage = () => {
 
 response = requests.post(
     "http://localhost:3000/chat",
+    headers={"Authorization": "Bearer ${apiKey}"},
     json={"prompt": "Write a poem about the sea"}
 )
 
@@ -447,7 +548,7 @@ print(response.json())`}
             </pre>
             <button
               className="absolute top-4 right-4 text-text-secondary hover:text-text-primary transition-colors"
-              onClick={() => copyToClipboard(`import requests\n\nresponse = requests.post(\n    "http://localhost:3000/chat",\n    json={"prompt": "Write a poem about the sea"}\n)\n\nprint(response.json())`)}
+              onClick={() => copyToClipboard(`import requests\n\nresponse = requests.post(\n    "http://localhost:3000/chat",\n    headers={"Authorization": "Bearer ${apiKey}"},\n    json={"prompt": "Write a poem about the sea"}\n)\n\nprint(response.json())`)}
             >
               <Copy className="w-4 h-4" />
             </button>

@@ -1,3 +1,4 @@
+
 export const formatResponseCode = (text: string): string => {
     // Some frontends or specific APIs (like compiling to python engines) 
     // want the literal \n sequence explicitly preserved as text rather than an actual invisible newline character.
@@ -13,3 +14,4 @@ export const formatResponseCode = (text: string): string => {
 
     return formatted;
 };
+
