@@ -124,27 +124,73 @@ export const askChatbot = async (prompt: string): Promise<string> => {
         await new Promise(r => setTimeout(r, 1500));
 
         // Extract assistant response
-        const response = await state.page.evaluate(() => {
+        const { text: response, debugHtml } = await state.page.evaluate(() => {
             const responses = document.querySelectorAll(
                 'div[data-message-author-role="assistant"]'
             );
 
-            if (responses.length === 0) return '';
+            if (responses.length === 0) return { text: '', debugHtml: '' };
 
             const last = responses[responses.length - 1];
 
-            // Try extracting code block first
-            const codeBlock = last.querySelector('pre code');
+            // Grab the <pre> element to dump its structure for debugging
+            const preEl = last.querySelector('pre');
+            const debugHtml = preEl ? preEl.outerHTML.slice(0, 1000) : 'NO_PRE_FOUND';
+
+            // Try multiple selectors for the code content
+            const codeBlock = last.querySelector('pre code') 
+                           || last.querySelector('code');
 
             if (codeBlock) {
-                return codeBlock.textContent || '';
+                // Use a TreeWalker to skip buttons and UI chrome
+                const walker = document.createTreeWalker(
+                    codeBlock,
+                    NodeFilter.SHOW_TEXT,
+                    {
+                        acceptNode(node: Node) {
+                            let parent = node.parentElement;
+                            while (parent && parent !== codeBlock) {
+                                const tag = parent.tagName.toLowerCase();
+                                if (tag === 'button' || tag === 'svg' || tag === 'path' ||
+                                    parent.getAttribute('role') === 'button' ||
+                                    parent.classList.contains('code-header') ||
+                                    parent.classList.contains('sticky')) {
+                                    return NodeFilter.FILTER_REJECT;
+                                }
+                                parent = parent.parentElement;
+                            }
+                            return NodeFilter.FILTER_ACCEPT;
+                        }
+                    }
+                );
+
+                let text = '';
+                let node: Node | null;
+                while ((node = walker.nextNode())) {
+                    text += node.textContent;
+                }
+                return { text: text || (codeBlock.textContent || ''), debugHtml };
             }
 
-            // Fallback to text
-            return (last as HTMLElement).innerText || '';
+            // Fallback to innerText
+            return { text: (last as HTMLElement).innerText || '', debugHtml };
         });
 
-        const finalResponse = response.trim();
+        // DEBUG: dump the pre HTML so we can see what's happening
+        console.log('[DEBUG] Pre element HTML:', debugHtml);
+        console.log('[DEBUG] Raw response first 300 chars:', JSON.stringify(response.slice(0, 300)));
+
+        // Aggressively strip ALL known ChatGPT UI labels that may leak through.
+        // Handle \r\n, \n, or no newline. Strip multiple labels if needed.
+        let finalResponse = response;
+        // Remove leading whitespace + known labels repeatedly until none remain
+        let changed = true;
+        while (changed) {
+            const before = finalResponse;
+            finalResponse = finalResponse.replace(/^[\s\r\n]*(Run|Python|Copy code|Copy)[\s\r\n]*/i, '');
+            changed = finalResponse !== before;
+        }
+        finalResponse = finalResponse.trim();
 
         if (!finalResponse) {
             console.error('Bot returned an empty response. Dumping debug data...');
