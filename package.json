@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "setup": "npm install && cd backend && npm install && npx prisma generate && npx prisma db push",
+    "setup": "npm install && cd backend && npm install && node -e \"var fs=require('fs'); if(!fs.existsSync('.env')) fs.copyFileSync('.env.example', '.env');\" && npx prisma generate && npx prisma db push",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
