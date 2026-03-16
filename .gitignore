@@ -119,7 +119,7 @@ dist
 
 # DynamoDB / SQLite Local files
 .dynamodb/
-.db
+*.db
 *.db-journal
 
 # Firebase cache directory
