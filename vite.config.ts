@@ -26,9 +26,39 @@ export default defineConfig({
   plugins: [react(), backendManagerPlugin()],
   server: {
     proxy: {
-      '/health': 'http://localhost:3000',
-      '/admin': 'http://localhost:3000',
-      '/chat': 'http://localhost:3000'
+      '/health': {
+        target: 'http://localhost:3000',
+        configure: (proxy, options) => {
+          proxy.on('error', (err: any, req, res) => {
+            if (err.code === 'ECONNREFUSED') {
+              res.writeHead(503, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Backend not running' }));
+            }
+          });
+        }
+      },
+      '/admin': {
+        target: 'http://localhost:3000',
+        configure: (proxy, options) => {
+          proxy.on('error', (err: any, req, res) => {
+            if (err.code === 'ECONNREFUSED') {
+              res.writeHead(503, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Backend not running' }));
+            }
+          });
+        }
+      },
+      '/chat': {
+        target: 'http://localhost:3000',
+        configure: (proxy, options) => {
+          proxy.on('error', (err: any, req, res) => {
+            if (err.code === 'ECONNREFUSED') {
+              res.writeHead(503, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Backend not running' }));
+            }
+          });
+        }
+      }
     }
   }
 })
