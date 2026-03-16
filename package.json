@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "setup": "npm install && cd backend && npm install && npx prisma generate",
+    "setup": "npm install && cd backend && npm install && npx prisma generate && npx prisma db push",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
