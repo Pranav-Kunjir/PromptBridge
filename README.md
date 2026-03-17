@@ -1,50 +1,55 @@
-# React + TypeScript + Vite
+# PromptBridge
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+PromptBridge is an open-source tool that exposes a "no limit LLM API" by bridging a frontend application and a Puppeteer-based backend.
 
-Currently, two official plugins are available:
+## Prerequisites
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- [Node.js](https://nodejs.org/) (v18 or higher recommended)
+- [npm](https://www.npmjs.com/)
 
-## Expanding the ESLint configuration
+## Installation
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Pranav-Kunjir/PromptBridge.git
+   cd PromptBridge
+   ```
 
-- Configure the top-level `parserOptions` property like this:
+2. Run the automated setup script from the root directory. This will install dependencies for both the frontend and backend, copy the `.env.example` to `.env` in the backend, and initialize the Prisma database:
+   ```bash
+   npm run setup
+   ```
+   *(Note: This executes `npm install`, `cd backend && npm install`, copying the `.env`, `npx prisma generate`, and `npx prisma db push` automatically.)*
 
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+3. Configure your environment variables in `backend/.env` if needed.
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+## Usage
 
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
+You'll need to run both the frontend and backend development servers.
 
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
-```
+1. **Start the Frontend Server**:
+   From the root directory, run:
+   ```bash
+   npm run dev
+   ```
+
+2. **Start the Backend Server**:
+   Open a new terminal window, navigate to the backend directory, and start the API:
+   ```bash
+   cd backend
+   npm run dev
+   ```
+
+Your frontend should now be running (typically at `http://localhost:5173`) and communicating with your PromptBridge backend!
+
+## Contributing
+
+We welcome contributions! To get started:
+
+1. Fork the repository.
+2. Create a new branch for your feature or bugfix (`git checkout -b feature/my-new-feature`).
+3. Commit your changes (`git commit -m 'Add some feature'`).
+4. Push to the branch (`git push origin feature/my-new-feature`).
+5. Open a Pull Request.
+
+Please ensure your code follows the existing style, and make sure `npm run lint` passes in the frontend if applicable.
